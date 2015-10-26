@@ -48,17 +48,39 @@ IF(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
   CONFIGURE_FILE( "${CMAKE_ROOT}/Modules/MacOSXBundleInfo.plist.in" 
                   "${CMAKE_CURRENT_BINARY_DIR}/Info.plist" )
 
-  ADD_CUSTOM_COMMAND( TARGET ${MAIN_EXECUTABLE} 
-                      COMMAND ${CMAKE_SOURCE_DIR}/mac/mac_create_icns.sh "${ICON_FILE}" "${CPACK_BUNDLE_ICON}"
-                      DEPENDS "${ICON_FILE}"
-                    )
+  FIND_PROGRAM(RSVG_CONVERT NAMES rsvg-convert)
+  MARK_AS_ADVANCED(RSVG_CONVERT)
+
+  FIND_PROGRAM(ICONUTIL_EXECUTABLE NAMES iconutil)
+  MARK_AS_ADVANCED(ICONUTIL_EXECUTABLE)
+
+  SET( ICONSET_DIR "icons.iconset" )
+  ADD_CUSTOM_TARGET("${ICONSET_DIR}" ALL COMMAND ${CMAKE_COMMAND} -E make_directory "${ICONSET_DIR}")
+
+  FOREACH( SIZE "16" "32" "128" "256" "512" )
+    ADD_CUSTOM_COMMAND( OUTPUT "${ICONSET_DIR}/icon_${SIZE}x${SIZE}.png"
+                        COMMAND ${RSVG_CONVERT} -w ${SIZE} -h ${SIZE} ${SVG_ICON_FILE} -o "${ICONSET_DIR}/icon_${SIZE}x${SIZE}.png"
+                        DEPENDS ${SVG_ICON_FILE} "${ICONSET_DIR}"
+                      )
+    ADD_CUSTOM_TARGET(icon_${SIZE}x${SIZE} ALL DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/${ICONSET_DIR}/icon_${SIZE}x${SIZE}.png" )
+    LIST(APPEND ICONS icon_${SIZE}x${SIZE} )
+
+    MATH( EXPR DOUBLE_SIZE "${SIZE} * 2" )
+    ADD_CUSTOM_COMMAND( OUTPUT "${ICONSET_DIR}/icon_${SIZE}x${SIZE}@2x.png"
+                        COMMAND ${RSVG_CONVERT} -w ${DOUBLE_SIZE} -h ${DOUBLE_SIZE} ${SVG_ICON_FILE} -o "${ICONSET_DIR}/icon_${SIZE}x${SIZE}@2x.png"
+                        DEPENDS ${SVG_ICON_FILE} "${ICONSET_DIR}"
+                      )
+    ADD_CUSTOM_TARGET("icon_${SIZE}x${SIZE}at2x" ALL DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/${ICONSET_DIR}/icon_${SIZE}x${SIZE}@2x.png")
+    LIST(APPEND ICONS icon_${SIZE}x${SIZE}at2x )
+  ENDFOREACH()
+  
+  ADD_CUSTOM_TARGET("icon.icns" ALL COMMAND ${ICONUTIL_EXECUTABLE} -c icns -o ${CPACK_BUNDLE_ICON} "${CMAKE_CURRENT_BINARY_DIR}/icons.iconset" DEPENDS ${ICONS})
 
 ELSEIF(${CMAKE_SYSTEM_NAME} MATCHES    "Linux")
   INSTALL( FILES "${SVG_ICON_FILE}" DESTINATION share/icons/hicolor/scalable/apps RENAME ${PROJECT_NAME}.svg )
 
   FIND_PROGRAM(RSVG_CONVERT NAMES rsvg-convert)
   MARK_AS_ADVANCED(RSVG_CONVERT)
-  MESSAGE( "RSVG_CONVERT=${RSVG_CONVERT}" )
 
   FOREACH( SIZE "16" "32" "48" "64" "128" "256" )
     ADD_CUSTOM_COMMAND( OUTPUT icon_${SIZE}x${SIZE}.png
